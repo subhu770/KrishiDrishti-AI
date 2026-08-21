@@ -44,7 +44,7 @@ cd KrishiDrishti-AI
 ### 2. Set Up Environment Variables
 Create a `.env` file in the root directory:
 ```bash
-GEMINI_API_KEY="your_api_key_here"
+GROQ_API_KEY="your_api_key_here"
 PORT=8000
 ```
 
@@ -57,5 +57,5 @@ uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ### 4. Containerized Run (Docker)
 ```bash
 docker build -t krishidrishti-ai .
-docker run -p 8000:8000 -e GEMINI_API_KEY="your_api_key_here" krishidrishti-ai
+docker run -p 8000:8000 -e GROQ_API_KEY="your_api_key_here" krishidrishti-ai
 ```

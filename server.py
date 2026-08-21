@@ -216,16 +216,23 @@ class PlantPathologyReport(BaseModel):
     odia_organic_alternative: str = Field(description="Organic/Bio-pesticide alternative and mixing ratio translated into Odia script (e.g. ନିମ ତେଲ ସ୍ପ୍ରେ (୫ ମିଲିଲିଟର/ଲିଟର ପାଣି) କିମ୍ବା ପଞ୍ଚଗବ୍ୟ ପ୍ରୟୋଗ କରନ୍ତୁ।)")
 
 def diagnose_leaf_multimodal(image_bytes: bytes, temperature: float, humidity: float) -> dict | None:
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        print("WARNING: GEMINI_API_KEY is not set. Falling back to local OpenCV rule-based classifier.")
+        print("WARNING: GROQ_API_KEY is not set. Falling back to local OpenCV rule-based classifier.")
         return None
         
     try:
-        from google import genai
-        from google.genai import types
+        import base64
+        import httpx
+        from groq import Groq
         
-        client = genai.Client(api_key=api_key)
+        # Bypass SSL verification due to local network self-signed certificate issues
+        http_client = httpx.Client(verify=False)
+        client = Groq(api_key=api_key, http_client=http_client)
+        
+        # Encode image_bytes to base64 jpeg data URL
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        image_data_url = f"data:image/jpeg;base64,{base64_image}"
         
         prompt = f"""
         You are KrishiDrishti AI, an enterprise-grade universal agricultural plant pathology expert.
@@ -239,40 +246,69 @@ def diagnose_leaf_multimodal(image_bytes: bytes, temperature: float, humidity: f
         - High humidity (>80%) and warm temperatures (24°C - 32°C) significantly accelerate fungal and bacterial pathogen propagation (e.g. Blights, Spotting).
         - Incorporate this environmental risk into your final advisory diagnosis and recommended action plans.
 
-        Your task is to identify:
-        1. The crop/plant name.
-        2. The exact disease name or health status (if healthy).
-        3. The disease name/status in Noto Sans Odia script.
-        4. An advisory in Odia script suitable for Odia farmers.
-        5. A technical advisory in English.
-        6. Prescribed chemical therapy (dosage and mixing ratio) in English.
-        7. Prescribed chemical therapy (dosage and mixing ratio) in Odia script.
-        8. Recommended organic alternative (bio-pesticide) in English.
-        9. Recommended organic alternative (bio-pesticide) in Odia script.
-        10. A confidence score between 0.0 and 100.0 (based on visibility, focus, and visual indicators in the image).
+        Your task is to identify and return a JSON object conforming exactly to the following schema fields:
+        - crop_name: Identified Crop/Plant name (e.g., Paddy, Tomato, Potato, Brinjal, etc.)
+        - disease_name: Exact Disease name or 'Healthy' if healthy (e.g., Bacterial Leaf Blight, Early Blight, Brown Spot, Rust, Powdery Mildew, Healthy, etc.)
+        - odia_disease_name: Disease Name or Health Status in Odia script (e.g., ଧାନ ପତ୍ର ପୋଡ଼ା ରୋଗ, ସୁସ୍ଥ ଫସଲ)
+        - confidence: Confidence score of classification from 0.0 to 100.0
+        - odia_advisory: Complete Odia spoken advisory advising the farmer on treatment steps and microclimate precautions
+        - english_advisory: Complete English technical advisory explaining disease details and crop management
+        - chemical_dosage: Exact chemical salt name and mixing ratio/dosage per acre (e.g., Streptocycline 6g + Copper Oxychloride 300g per acre in 200L water)
+        - odia_chemical_dosage: Exact chemical salt name and mixing ratio/dosage per acre translated into Odia script
+        - organic_alternative: Organic/Bio-pesticide alternative and mixing ratio (e.g., Neem oil 1500ppm @ 3ml/L water)
+        - odia_organic_alternative: Organic/Bio-pesticide alternative and mixing ratio translated into Odia script
 
-        Return a strict structured JSON matching the specified schema.
+        You MUST return a valid JSON object matching this exact structure:
+        {{
+            "crop_name": "crop name",
+            "disease_name": "disease name",
+            "odia_disease_name": "disease name in Odia",
+            "confidence": 95.0,
+            "odia_advisory": "Odia advisory spoken to farmer",
+            "english_advisory": "English technical advisory",
+            "chemical_dosage": "dosage description",
+            "odia_chemical_dosage": "dosage description in Odia",
+            "organic_alternative": "organic alternative description",
+            "odia_organic_alternative": "organic alternative description in Odia"
+        }}
+
+        CRITICAL RULES:
+        1. Every string value in the JSON MUST be on a single line. Do NOT output raw newline characters inside any JSON string. Use space instead of newlines.
+        2. Escape any double quotes (e.g. use \\") if they are present inside string values.
         """
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type="image/jpeg",
-                ),
-                prompt
+        response = client.chat.completions.create(
+            model="qwen/qwen3.6-27b",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant. You must output ONLY a valid JSON object matching the requested schema. Do not output markdown blocks. Start your response directly with '{' and end with '}'."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data_url
+                            }
+                        }
+                    ]
+                }
             ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=PlantPathologyReport,
-                temperature=0.2,
-            ),
+            response_format={"type": "json_object"},
+            reasoning_format="parsed",
+            max_tokens=4096,
+            temperature=0.2
         )
         
-        # Parse the structured JSON response
-        result_json = json.loads(response.text)
-        return result_json
+        response_text = response.choices[0].message.content
+        report = PlantPathologyReport.model_validate_json(response_text)
+        return report.model_dump()
         
     except Exception as e:
         print(f"ERROR: Multimodal vision API inference failed: {e}")

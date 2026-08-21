@@ -8,7 +8,11 @@ import hashlib
 import urllib.request
 import json
 from PIL import Image
-from gtts import gTTS
+try:
+    from gtts import gTTS
+    HAS_GTTS = True
+except ImportError:
+    HAS_GTTS = False
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -360,7 +364,10 @@ def generate_audio(text: str, filename: str):
     Saves file in static/audio/
     Falls back gracefully if Odia ('or') language code is not supported.
     """
-    filepath = os.path.join("static", "audio", filename)
+    if not HAS_GTTS:
+        print("WARNING: Audio advisory generation is disabled (gTTS library not installed).")
+        return None
+    filepath = str(BASE_DIR / "static" / "audio" / filename)
     try:
         # Try requested Odia language 'or'
         tts = gTTS(text=text, lang='or')
@@ -631,7 +638,7 @@ async def diagnose_leaf(
         advisory_text = odia_advisory
         advisory_hash = hashlib.md5(advisory_text.encode('utf-8')).hexdigest()
         audio_filename = f"{advisory_hash}.mp3"
-        audio_path = os.path.join("static", "audio", audio_filename)
+        audio_path = str(BASE_DIR / "static" / "audio" / audio_filename)
         
         if not os.path.exists(audio_path):
             generate_audio(advisory_text, audio_filename)

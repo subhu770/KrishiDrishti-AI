@@ -41,32 +41,21 @@ git clone https://github.com/subhu770/KrishiDrishti-AI.git
 cd KrishiDrishti-AI
 ```
 
-### 2. Configure Environment Variables
+### 2. Set Up Environment Variables
 Create a `.env` file in the root directory:
-```env
-GEMINI_API_KEY=your_gemini_api_key
-ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+```bash
+GEMINI_API_KEY="your_api_key_here"
+PORT=8000
 ```
 
-### 3. Install Dependencies
+### 3. Run FastAPI Web App Locally
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-### 4. Run the Development Server
-```bash
 uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
-Open `http://localhost:8000` in your web browser.
 
-### 5. Docker Deployment
+### 4. Containerized Run (Docker)
 ```bash
-docker-compose up --build
+docker build -t krishidrishti-ai .
+docker run -p 8000:8000 -e GEMINI_API_KEY="your_api_key_here" krishidrishti-ai
 ```
-
----
-
-## 📄 License
-This project is licensed under the MIT License.

@@ -1,24 +1,33 @@
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
+try:
+    import torch
+    import torch.nn as nn
+    from torchvision import models, transforms
+    import cv2
+    import numpy as np
+    HAS_ML_LIBRARIES = True
+except ImportError:
+    HAS_ML_LIBRARIES = False
+
 from PIL import Image
-import cv2
-import numpy as np
 
 # 1. Vision Model Structure
-class KrishiDrishtiClassifier(nn.Module):
-    def __init__(self, num_classes=6):
-        super(KrishiDrishtiClassifier, self).__init__()
-        self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        num_ftrs = self.backbone.fc.in_features
-        self.backbone.fc = nn.Sequential(
-            nn.Linear(num_ftrs, 128),
-            nn.ReLU(),
-            nn.Linear(128, num_classes)
-        )
+if HAS_ML_LIBRARIES:
+    class KrishiDrishtiClassifier(nn.Module):
+        def __init__(self, num_classes=6):
+            super(KrishiDrishtiClassifier, self).__init__()
+            self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+            num_ftrs = self.backbone.fc.in_features
+            self.backbone.fc = nn.Sequential(
+                nn.Linear(num_ftrs, 128),
+                nn.ReLU(),
+                nn.Linear(128, num_classes)
+            )
 
-    def forward(self, x):
-        return self.backbone(x)
+        def forward(self, x):
+            return self.backbone(x)
+else:
+    class KrishiDrishtiClassifier:
+        pass
 
 # 2. Disease Mapping & Odia Advisory Database
 DISEASE_DB = {

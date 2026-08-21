@@ -3,19 +3,25 @@ from dotenv import load_dotenv
 load_dotenv()
 import io
 import hashlib
-import cv2
-import numpy as np
 import urllib.request
 import json
-import torch
-import torch.nn as nn
-from torchvision import models, transforms
 from PIL import Image
 from gtts import gTTS
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
+
+# Try importing heavy ML libraries, make optional for serverless/Vercel environments
+try:
+    import torch
+    import torch.nn as nn
+    from torchvision import models, transforms
+    import cv2
+    import numpy as np
+    HAS_ML_LIBRARIES = True
+except ImportError:
+    HAS_ML_LIBRARIES = False
 
 # Import existing configurations from model_engine
 from model_engine import evaluate_weather_risk, extract_leaf_features, classify_crop_and_disease
@@ -160,39 +166,46 @@ CLASS_NAMES = [
     "Potato - Early Blight", "Potato - Late Blight", "Potato - Healthy"
 ]
 
-class CropDiseaseResNet18(nn.Module):
-    def __init__(self, num_classes=9):
-        super(CropDiseaseResNet18, self).__init__()
-        try:
-            # Attempt to load pretrained model
-            self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        except Exception:
-            # Fallback to uninitialized weights if offline or error downloading
-            self.backbone = models.resnet18(weights=None)
-        
-        num_ftrs = self.backbone.fc.in_features
-        self.backbone.fc = nn.Linear(num_ftrs, num_classes)
+if HAS_ML_LIBRARIES:
+    class CropDiseaseResNet18(nn.Module):
+        def __init__(self, num_classes=9):
+            super(CropDiseaseResNet18, self).__init__()
+            try:
+                # Attempt to load pretrained model
+                self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+            except Exception:
+                # Fallback to uninitialized weights if offline or error downloading
+                self.backbone = models.resnet18(weights=None)
+            
+            num_ftrs = self.backbone.fc.in_features
+            self.backbone.fc = nn.Linear(num_ftrs, num_classes)
 
-    def forward(self, x):
-        return self.backbone(x)
+        def forward(self, x):
+            return self.backbone(x)
 
-# Initialize model and set to evaluation mode
-model = CropDiseaseResNet18(num_classes=9)
-model.eval()
+    # Initialize model and set to evaluation mode
+    model = CropDiseaseResNet18(num_classes=9)
+    model.eval()
 
-# Preprocessing transforms (Standard ImageNet normalization)
-image_transforms = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225]
-    )
-])
+    # Preprocessing transforms (Standard ImageNet normalization)
+    image_transforms = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+else:
+    model = None
+    image_transforms = None
 
 # Inference function using dynamic ML feature-mapping engine
 def predict_crop_disease(image_bytes: bytes) -> tuple[str, float]:
+    if not HAS_ML_LIBRARIES:
+        print("WARNING: Offline ML model fallback is disabled (missing ML libraries).")
+        return "Paddy - Healthy", 0.65
     features = extract_leaf_features(image_bytes)
     if features is None:
         return "Unknown", 0.0

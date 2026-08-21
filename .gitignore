@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node / Mobile
+node_modules/
+KrishiDrishtiMobile/node_modules/
+KrishiDrishtiMobile/.expo/
+KrishiDrishtiMobile/dist/
+
+# Logs & Local Config
+*.log
+.env
+.idea/
+.vscode/
+
+# Project specific
+static/audio/*.mp3

@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: krishidrishti_web
+    restart: always
+    command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 server:app
+    expose:
+      - "8000"
+    environment:
+      - APP_ENV=production
+      - ALLOWED_ORIGINS=https://krishidrishti.ai,https://www.krishidrishti.ai
+    volumes:
+      - static_volume:/app/static
+      - audio_volume:/app/static/audio
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: krishidrishti_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+      - static_volume:/app/static:ro
+      - audio_volume:/app/static/audio:ro
+    depends_on:
+      - web
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Automated SSL Certificate Management (Certbot)
+  # Uncomment the lines below once you configure your actual domain in nginx.conf
+  # certbot:
+  #   image: certbot/certbot
+  #   container_name: krishidrishti_certbot
+  #   restart: unless-stopped
+  #   volumes:
+  #     - certbot_conf:/etc/letsencrypt
+  #     - certbot_www:/var/www/certbot
+  #   # Checks for SSL certificate renewal every 12 hours
+  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  static_volume:
+  audio_volume:
+  certbot_conf:
+  certbot_www:

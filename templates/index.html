@@ -427,6 +427,8 @@
         let resolvedDistrictName = "Bhubaneswar";
         let resolvedLatitude = 20.2961;
         let resolvedLongitude = 85.8245;
+        let clientSideUtterance = null;
+        let isClientSpeaking = false;
 
         // Sliders controls
         const tempSlider = document.getElementById('temp-slider');
@@ -585,8 +587,14 @@
             standbyCard.classList.remove('hidden');
 
             // Stop any playing audio
-            audio.pause();
-            audio.src = '';
+            if (audio) {
+                audio.pause();
+                audio.removeAttribute('src');
+            }
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            isClientSpeaking = false;
         });
 
         // Audio controls
@@ -598,11 +606,63 @@
         const audioTime = document.getElementById('audio-time');
 
         playBtn.addEventListener('click', () => {
-            if (!audio.src) return;
-            if (audio.paused) {
-                audio.play();
+            if (audio.src && audio.src !== window.location.href && !audio.src.endsWith('#') && audio.src !== '') {
+                if (audio.paused) {
+                    audio.play().catch(e => console.log("Audio play failed:", e));
+                } else {
+                    audio.pause();
+                }
             } else {
-                audio.pause();
+                if (window.speechSynthesis) {
+                    if (window.speechSynthesis.speaking) {
+                        if (window.speechSynthesis.paused) {
+                            window.speechSynthesis.resume();
+                            playIcon.classList.add('hidden');
+                            pauseIcon.classList.remove('hidden');
+                        } else {
+                            window.speechSynthesis.pause();
+                            playIcon.classList.remove('hidden');
+                            pauseIcon.classList.add('hidden');
+                        }
+                    } else {
+                        const odiaAdvisory = document.getElementById('report-advisory-text').textContent || "";
+                        if (!odiaAdvisory) return;
+
+                        clientSideUtterance = new SpeechSynthesisUtterance(odiaAdvisory);
+                        const voices = window.speechSynthesis.getVoices();
+                        let voice = voices.find(v => v.lang.startsWith('or') || v.lang.startsWith('or-IN'));
+                        if (!voice) {
+                            voice = voices.find(v => v.lang.startsWith('hi') || v.lang.startsWith('hi-IN'));
+                        }
+                        if (!voice) {
+                            voice = voices.find(v => v.lang.startsWith('en'));
+                        }
+                        if (voice) {
+                            clientSideUtterance.voice = voice;
+                        }
+                        clientSideUtterance.lang = voice ? voice.lang : 'hi-IN';
+
+                        clientSideUtterance.onstart = () => {
+                            isClientSpeaking = true;
+                            playIcon.classList.add('hidden');
+                            pauseIcon.classList.remove('hidden');
+                        };
+                        clientSideUtterance.onend = () => {
+                            isClientSpeaking = false;
+                            playIcon.classList.remove('hidden');
+                            pauseIcon.classList.add('hidden');
+                        };
+                        clientSideUtterance.onerror = () => {
+                            isClientSpeaking = false;
+                            playIcon.classList.remove('hidden');
+                            pauseIcon.classList.add('hidden');
+                        };
+
+                        window.speechSynthesis.speak(clientSideUtterance);
+                    }
+                } else {
+                    alert("Your browser does not support text-to-speech synthesis.");
+                }
             }
         });
 
@@ -802,7 +862,19 @@
                     // Update Advisory Text & Reset Audio Player
                     reportAdvisoryText.textContent = data.odia_advisory;
                     document.getElementById('report-english-advisory-text').textContent = data.english_advisory;
-                    audio.src = data.audio_url;
+                    
+                    if (window.speechSynthesis) {
+                        window.speechSynthesis.cancel();
+                    }
+                    isClientSpeaking = false;
+
+                    if (data.audio_base64) {
+                        audio.src = data.audio_base64;
+                    } else if (data.audio_url) {
+                        audio.src = data.audio_url;
+                    } else {
+                        audio.removeAttribute('src');
+                    }
                     audio.load();
 
                     // Store latest diagnosis for PDF print/download

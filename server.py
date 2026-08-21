@@ -358,33 +358,49 @@ def get_weather_risk(humidity: float, temp: float):
 
 
 # 3. Audio Generator Helper
-def generate_audio(text: str, filename: str):
+def generate_audio_base64(text: str) -> str | None:
     """
-    Generates an Odia language speech audio file (.mp3) using gTTS.
-    Saves file in static/audio/
+    Generates an Odia language speech audio file as an in-memory base64 data URI using gTTS.
     Falls back gracefully if Odia ('or') language code is not supported.
     """
     if not HAS_GTTS:
         print("WARNING: Audio advisory generation is disabled (gTTS library not installed).")
         return None
-    filepath = str(BASE_DIR / "static" / "audio" / filename)
+    
+    import io
+    import base64
+    
     try:
         # Try requested Odia language 'or'
         tts = gTTS(text=text, lang='or')
-        tts.save(filepath)
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        audio_b64 = base64.b64encode(fp.read()).decode('utf-8')
+        return f"data:audio/mp3;base64,{audio_b64}"
     except Exception as e:
         print(f"gTTS failed for Odia ('or'): {e}. Falling back to Hindi ('hi') phonetics.")
         try:
-            # Fallback to Hindi ('hi') to read the script phonetically or handle gracefully
+            # Fallback to Hindi ('hi')
             tts = gTTS(text=text, lang='hi')
-            tts.save(filepath)
+            fp = io.BytesIO()
+            tts.write_to_fp(fp)
+            fp.seek(0)
+            audio_b64 = base64.b64encode(fp.read()).decode('utf-8')
+            return f"data:audio/mp3;base64,{audio_b64}"
         except Exception as e2:
             print(f"gTTS fallback failed: {e2}. Generating generic English voice advisory.")
-            # If everything fails, generate a mock English audio
-            tts = gTTS(text="Precision advisory generated. Please check the screen for details.", lang='en')
-            tts.save(filepath)
-            
-    return f"/static/audio/{filename}"
+            try:
+                # English fallback
+                tts = gTTS(text="Precision advisory generated. Please check the screen for details.", lang='en')
+                fp = io.BytesIO()
+                tts.write_to_fp(fp)
+                fp.seek(0)
+                audio_b64 = base64.b64encode(fp.read()).decode('utf-8')
+                return f"data:audio/mp3;base64,{audio_b64}"
+            except Exception as e3:
+                print(f"gTTS English fallback failed: {e3}")
+                return None
 
 # WMO Weather Code definitions for high-precision weather resolution
 WMO_WEATHER_CODES = {
@@ -634,16 +650,9 @@ async def diagnose_leaf(
                 }
             })
         
-        # Generate Odia Audio URL (caching by advisory text hash to avoid regeneration)
+        # Generate Odia Audio as base64 data URI (in-memory, serverless compatible)
         advisory_text = odia_advisory
-        advisory_hash = hashlib.md5(advisory_text.encode('utf-8')).hexdigest()
-        audio_filename = f"{advisory_hash}.mp3"
-        audio_path = str(BASE_DIR / "static" / "audio" / audio_filename)
-        
-        if not os.path.exists(audio_path):
-            generate_audio(advisory_text, audio_filename)
-            
-        audio_url = f"/static/audio/{audio_filename}"
+        audio_base64 = generate_audio_base64(advisory_text)
         
         return JSONResponse(content={
             "status": "success",
@@ -653,7 +662,8 @@ async def diagnose_leaf(
                 "confidence": round(confidence_score * 100, 2),
                 "odia_advisory": advisory_text,
                 "english_advisory": english_advisory,
-                "audio_url": audio_url,
+                "audio_url": "",
+                "audio_base64": audio_base64,
                 "chemical_dosage": chemical_dosage,
                 "odia_chemical_dosage": odia_chemical_dosage,
                 "organic_solution": organic_solution,

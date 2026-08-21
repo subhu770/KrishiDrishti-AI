@@ -153,11 +153,15 @@ app.add_middleware(
 )
 
 # Ensure directories exist
-os.makedirs(os.path.join("static", "audio"), exist_ok=True)
-os.makedirs("templates", exist_ok=True)
+try:
+    os.makedirs(os.path.join("static", "audio"), exist_ok=True)
+    os.makedirs("templates", exist_ok=True)
+except Exception as e:
+    print(f"WARNING: Failed to create directories: {e}")
 
 # Mount static folder
-app.mount("/static", StaticFiles(directory="static"), name="static")
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 1. PyTorch Model Configuration (ResNet18 for 9 classes)
 CLASS_NAMES = [

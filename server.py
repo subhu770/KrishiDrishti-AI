@@ -13,6 +13,13 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+
+template_dir = BASE_DIR / "templates"
+if not template_dir.exists():
+    template_dir = BASE_DIR
+
+templates = Jinja2Templates(directory=str(template_dir))
 
 # Try importing heavy ML libraries, make optional for serverless/Vercel environments
 try:
@@ -541,9 +548,9 @@ async def get_live_weather(lat: float = None, lon: float = None):
 # 5. GET '/' Endpoint serving dashboard
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
-    index_path = str(BASE_DIR / "templates" / "index.html")
+    index_path = str(template_dir / "index.html")
     if not os.path.exists(index_path):
-        raise HTTPException(status_code=404, detail="Dashboard index.html not found in templates/ directory.")
+        raise HTTPException(status_code=404, detail="Dashboard index.html not found.")
     with open(index_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 

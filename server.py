@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
 import io
 import hashlib
 import urllib.request
@@ -154,14 +156,14 @@ app.add_middleware(
 
 # Ensure directories exist
 try:
-    os.makedirs(os.path.join("static", "audio"), exist_ok=True)
-    os.makedirs("templates", exist_ok=True)
+    os.makedirs(str(BASE_DIR / "static" / "audio"), exist_ok=True)
+    os.makedirs(str(BASE_DIR / "templates"), exist_ok=True)
 except Exception as e:
     print(f"WARNING: Failed to create directories: {e}")
 
 # Mount static folder
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+if (BASE_DIR / "static").exists():
+    app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # 1. PyTorch Model Configuration (ResNet18 for 9 classes)
 CLASS_NAMES = [
@@ -539,7 +541,7 @@ async def get_live_weather(lat: float = None, lon: float = None):
 # 5. GET '/' Endpoint serving dashboard
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
-    index_path = os.path.join("templates", "index.html")
+    index_path = str(BASE_DIR / "templates" / "index.html")
     if not os.path.exists(index_path):
         raise HTTPException(status_code=404, detail="Dashboard index.html not found in templates/ directory.")
     with open(index_path, "r", encoding="utf-8") as f:
